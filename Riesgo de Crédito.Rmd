@@ -1,0 +1,178 @@
+---
+title: "Riesgo de crédito"
+author: "Isaac Sandoval"
+date: "2025-06-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+library(dplyr)
+library(stats)
+library(ggplot2)
+library(gridExtra)
+library(tidyverse)
+library(tidyquant)
+library(PerformanceAnalytics)
+library(lubridate)
+
+source("./Funciones a utilizar.R") # Esta línea carga las funciones del Script de funciones.
+
+```
+Se cargan los datos de las diversas divisas que componen el portafolio.
+
+```{r}
+
+eur_usd <- read.csv("C:\\Users\\Usuario\\Desktop\\Actuariado\\Riesgo En Entidades Financieras II\\Proyecto\\Riesgo de Crédito\\EUR_USD_Historical_Data.csv") %>%
+  mutate(greenRed=ifelse(Open-Price>0,
+                           "Red",
+                           "Green"),
+         Date = mdy(gsub("/", "-", Date)))
+
+usd_cny <- read.csv("C:\\Users\\Usuario\\Desktop\\Actuariado\\Riesgo En Entidades Financieras II\\Proyecto\\Riesgo de Crédito\\USD_CNY_Historical_Data.csv") %>%
+  mutate(greenRed=ifelse(Open-Price>0,
+                           "Red",
+                           "Green"),
+         Date = mdy(gsub("/", "-", Date)))
+
+usd_crc <- read.csv("C:\\Users\\Usuario\\Desktop\\Actuariado\\Riesgo En Entidades Financieras II\\Proyecto\\Riesgo de Crédito\\USD_CRC_Historical_Data.csv") %>%
+  mutate(greenRed=ifelse(Open-Price>0,
+                           "Red",
+                           "Green"),
+         Date = mdy(gsub("/", "-", Date)))
+
+```
+
+Preliminarmente, se pueden observar las tendencias que presentaron los 3 activos a lo largo del periodo de estudio designado.
+
+```{r}
+
+euro <- eur_usd %>% 
+    ggplot()+
+    geom_segment(aes(x = Date,
+                     xend=Date,
+                     y =Open,
+                     yend =Price,
+                     colour=greenRed),
+                 size=1)+
+    theme_tq()+
+    geom_segment(aes(x = Date,
+                     xend=Date,
+                     y =High,
+                     yend =Low,
+                     colour=greenRed))+
+    scale_color_manual(values=c("Forest Green","Red"))+
+    theme(legend.position ="none") + 
+    theme_minimal()
+
+yuan <- usd_cny %>% 
+    ggplot()+
+    geom_segment(aes(x = Date,
+                     xend=Date,
+                     y =Open,
+                     yend =Price,
+                     colour=greenRed),
+                 size=1)+
+    theme_tq()+
+    geom_segment(aes(x = Date,
+                     xend=Date,
+                     y =High,
+                     yend =Low,
+                     colour=greenRed))+
+    scale_color_manual(values=c("Forest Green","Red"))+
+    theme(legend.position ="none") + 
+    theme_minimal()
+
+colon <- usd_crc %>% 
+    ggplot()+
+    geom_segment(aes(x = Date,
+                     xend=Date,
+                     y =Open,
+                     yend =Price,
+                     colour=greenRed),
+                 size=1)+
+    theme_tq()+
+    geom_segment(aes(x = Date,
+                     xend=Date,
+                     y =High,
+                     yend =Low,
+                     colour=greenRed))+
+    scale_color_manual(values=c("Forest Green","Red"))+
+    theme(legend.position ="none") + 
+    theme_minimal()
+
+grid.arrange(
+    euro,
+    yuan,
+    colon,
+    ncol=1
+)
+
+
+```
+Ahora se calculan los retornos para cada uno de los diás presentes en los datos mediante la fórmula:
+
+$$
+              R_i = ln\biggl(\frac{P_t}{P_{t-1}}\biggr) 
+$$
+
+```{r}
+eur_usd <- eur_usd %>% 
+  mutate(Returns = log(Price/lag(Price)))
+
+usd_cny <- usd_cny %>% 
+  mutate(Returns = log(Price/lag(Price)))
+
+usd_crc <- usd_crc %>% 
+  mutate(Returns = log(Price/lag(Price)))
+```
+
+Una vez que se poseen los retornos para cada una de las divisas, se procede al cálculo del VaR (Value at Risk) y el ES (Expected Shortfall) mediante tres metodologías: método histórico, Gaussiano y Cornish-Fisher al 90%, 95% y 99%.
+
+Recordatorios:
+
+* El VaR representa la pérdida teórica máxima que se puede esperar dado un determinado portafolio.
+* es la pérdida esperada por una cartera en un horizonte temporal determinado una vez superado el VAR medido por el nivel de confianza elegido
+
+Primero se realiza el caso del Euro:
+
+```{r}
+
+resultados_eur <- analizar_riesgo_divisa(eur_usd, niveles_confianza = c(0.01, 0.05, 0.10))
+
+graficar_comparacion_var(eur_usd, 0.05)
+
+comparacion_eur <- comparar_metodos(eur_usd)
+
+```
+Seguidamente, el caso del Yuan:
+
+```{r}
+
+resultados_cny <- analizar_riesgo_divisa(usd_cny, niveles_confianza = c(0.01, 0.05, 0.10))
+
+graficar_comparacion_var(usd_cny, 0.05)
+
+comparacion_cny <- comparar_metodos(usd_cny)
+
+```
+Finalmente, el caso del Colón:
+
+```{r}
+
+resultados_crc <- analizar_riesgo_divisa(usd_crc, niveles_confianza = c(0.01, 0.05, 0.10))
+
+graficar_comparacion_var(usd_crc, 0.05)
+
+comparacion_crc <- comparar_metodos(usd_crc)
+
+```
+
+Dos elementos que resultan pertinentes considerar son:
+
+* Los retornos parecen seguir una distribución normal en los 3 casos, más el nivel de curtosis en cada uno varía considerablemente. 
+* Una ventaja de utilizar el método de Cornish-Fisher es que esta metodología asume el uso de momentos de orden superior de la distribución para ajustar la desviación de la misma. 
+
+# Modelos GARCH
+
+
