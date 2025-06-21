@@ -15,6 +15,9 @@ library(tidyverse)
 library(tidyquant)
 library(PerformanceAnalytics)
 library(lubridate)
+library(copula)
+library(VineCopula)
+library(rugarch)
 
 source("./Funciones a utilizar.R") # Esta línea carga las funciones del Script de funciones.
 
@@ -27,19 +30,19 @@ eur_usd <- read.csv("C:\\Users\\Usuario\\Desktop\\Actuariado\\Riesgo En Entidade
   mutate(greenRed=ifelse(Open-Price>0,
                            "Red",
                            "Green"),
-         Date = mdy(gsub("/", "-", Date)))
+         Date = mdy(gsub("/", "-", Date))) %>% dplyr::select(-starts_with('Vo'))
 
 usd_cny <- read.csv("C:\\Users\\Usuario\\Desktop\\Actuariado\\Riesgo En Entidades Financieras II\\Proyecto\\Riesgo de Crédito\\USD_CNY_Historical_Data.csv") %>%
   mutate(greenRed=ifelse(Open-Price>0,
                            "Red",
                            "Green"),
-         Date = mdy(gsub("/", "-", Date)))
+         Date = mdy(gsub("/", "-", Date))) %>% dplyr::select(-starts_with('Vo'))
 
 usd_crc <- read.csv("C:\\Users\\Usuario\\Desktop\\Actuariado\\Riesgo En Entidades Financieras II\\Proyecto\\Riesgo de Crédito\\USD_CRC_Historical_Data.csv") %>%
   mutate(greenRed=ifelse(Open-Price>0,
                            "Red",
                            "Green"),
-         Date = mdy(gsub("/", "-", Date)))
+         Date = mdy(gsub("/", "-", Date))) %>% dplyr::select(-starts_with('Vo'))
 
 ```
 
@@ -118,7 +121,7 @@ $$
 
 ```{r}
 eur_usd <- eur_usd %>% 
-  mutate(Returns = log(Price/lag(Price)))
+  mutate(Returns = log(Price/lag(Price))) 
 
 usd_cny <- usd_cny %>% 
   mutate(Returns = log(Price/lag(Price)))
@@ -175,4 +178,119 @@ Dos elementos que resultan pertinentes considerar son:
 
 # Modelos GARCH
 
+
+# Implementación del VaR y el ES mediante el uso de cópulas.
+
+Las cópulas separan la estructura de dependencia entre distribuciones marginales de acuerdo a lo establecido en el teorema de Sklar, o lo que es lo mismo:
+
+Sea H una distribución conjunta con marginales F y G. Entonces existe una cópula C tal que para todo x,y $\in \ \mathbb{R}$ se cumple que: 
+
+$$
+                                    H(x,y) = C(F(x), G(y))
+$$
+
+
+Algunas de las cópulas analizadas son las siguientes:
+
+## Cópula Gaussiana
+C^Gauss(u₁,u₂) = Φ_R(Φ⁻¹(u₁), Φ⁻¹(u₂))
+
+Parámetro: ρ (correlación lineal)
+Características: Dependencia simétrica, sin dependencia en colas
+Uso: Cuando la dependencia es principalmente lineal
+
+## Cópula t-Student
+Similar a Gaussiana pero con colas más pesadas
+
+Parámetros: ρ (correlación) y ν (grados de libertad)
+Características: Dependencia en colas extremas
+Uso: Para datos con eventos extremos correlacionados
+
+##  Cópula Clayton
+C^Clayton(u₁,u₂) = (u₁⁻θ + u₂⁻θ - 1)^(-1/θ)
+
+Parámetro: θ > 0
+Características: Dependencia fuerte en cola inferior
+Uso: Para modelar co-movimientos en crisis (pérdidas simultáneas)
+
+## Cópula Gumbel
+C^Gumbel(u₁,u₂) = exp(-((−ln u₁)^θ + (−ln u₂)^θ)^(1/θ))
+
+Parámetro: θ ≥ 1
+Características: Dependencia fuerte en cola superior
+Uso: Para eventos extremos positivos correlacionados
+
+## Cópula Frank
+Dependencia simétrica, más débil en las colas
+
+Uso: Dependencia moderada sin sesgo hacia colas específicas
+
+Los modelos GARCH se utilizan para modelar volatilidad cambiante, la simulación Monte Carlo para generar escenarios.
+
+La función te proporciona:
+
+* VaR: "Con 95% de probabilidad, no perderé más del X%"
+* ES: "Si pierdo más que VaR, esperaré perder Y% en promedio"
+* Modelos validados: Selección automática del mejor modelo
+* Robustez: Múltiples alternativas si algo falla
+
+## Uso del modelo GARCH 
+
+El GARCH (Generalized AutoRegressive Conditional Heteroskedasticity) modela la volatilidad cambiante en el tiempo
+Los retornos financieros muestran heterocedasticidad condicional, es decir, períodos de alta y baja volatilidad se agrupan. En particular, se hace uso del GARCH(1,1), el cual se modela bajo la siguiente ecuación:
+            $ \sigma^2_t = \omega + \alpha * \epsilon^2_{t-1} + \beta * \sigma^2_{t-1}$ 
+
+Además, los residuos estandarizados eliminan la estructura de volatilidad para enfocar la dependencia.
+
+
+```{r}
+
+source("./Copulas_2.R") # Esta línea carga las funciones del Script de Cópulas
+```
+Se utiliza con los datos actuales
+
+```{r}
+
+resultados <- calcular_var_es_copula(eur_usd %>% rename(Percentage_change=7), 
+                                    niveles_confianza = c(0.95, 0.99))
+
+resultados$resultados_var_es
+resultados$comparacion_aic
+resultados$modelo_copula
+resultados$modelo_garch
+
+graficos <- crear_graficos_diagnosticos(resultados)
+```
+
+Se aplica el modelo para el caso del colón.
+
+```{r}
+
+resultados_crc <- calcular_var_es_copula(usd_crc %>% rename(Percentage_change=7), 
+                                    niveles_confianza = c(0.95, 0.99))
+
+resultados_crc$resultados_var_es
+resultados_crc$comparacion_aic
+resultados_crc$modelo_copula
+resultados_crc$modelo_garch
+
+graficos_crc <- crear_graficos_diagnosticos(resultados_crc)
+
+```
+
+Para el caso del Yuan
+
+```{r}
+
+resultados_cny <- calcular_var_es_copula(usd_cny %>% rename(Percentage_change=7), 
+                                    niveles_confianza = c(0.95, 0.99))
+
+resultados_cny$resultados_var_es
+resultados_cny$comparacion_aic
+resultados_cny$modelo_copula
+resultados_cny$modelo_garch
+
+graficos_cny <- crear_graficos_diagnosticos(resultados_cny)
+
+```
 
