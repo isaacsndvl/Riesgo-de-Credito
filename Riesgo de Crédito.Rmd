@@ -22,6 +22,7 @@ library(rugarch)
 source("./Funciones a utilizar.R") # Esta línea carga las funciones del Script de funciones.
 
 ```
+
 Se cargan los datos de las diversas divisas que componen el portafolio.
 
 ```{r}
@@ -113,6 +114,15 @@ grid.arrange(
 
 
 ```
+
+
+La distribución del portafolio está dada por:
+
+```{r}
+distribución_portafolio <- c(0.55, 0.25, 0.2)
+```
+
+
 Ahora se calculan los retornos para cada uno de los diás presentes en los datos mediante la fórmula:
 
 $$
@@ -177,7 +187,6 @@ Dos elementos que resultan pertinentes considerar son:
 * Una ventaja de utilizar el método de Cornish-Fisher es que esta metodología asume el uso de momentos de orden superior de la distribución para ajustar la desviación de la misma. 
 
 # Modelos GARCH
-
 
 # Implementación del VaR y el ES mediante el uso de cópulas.
 
@@ -247,17 +256,18 @@ Además, los residuos estandarizados eliminan la estructura de volatilidad para 
 
 source("./Copulas_2.R") # Esta línea carga las funciones del Script de Cópulas
 ```
+
 Se utiliza con los datos actuales
 
 ```{r}
 
-resultados <- calcular_var_es_copula(eur_usd %>% rename(Percentage_change=7), 
+resultados_copula_eur <- calcular_var_es_copula(eur_usd %>% rename(Percentage_change=7), 
                                     niveles_confianza = c(0.95, 0.99))
 
-resultados$resultados_var_es
-resultados$comparacion_aic
-resultados$modelo_copula
-resultados$modelo_garch
+resultados_copula_eur$resultados_var_es
+resultados_copula_eur$comparacion_aic
+resultados_copula_eur$modelo_copula
+resultados_copula_eur$modelo_garch
 
 graficos <- crear_graficos_diagnosticos(resultados)
 ```
@@ -266,13 +276,13 @@ Se aplica el modelo para el caso del colón.
 
 ```{r}
 
-resultados_crc <- calcular_var_es_copula(usd_crc %>% rename(Percentage_change=7), 
+resultados_copula_crc <- calcular_var_es_copula(usd_crc %>% rename(Percentage_change=7), 
                                     niveles_confianza = c(0.95, 0.99))
 
-resultados_crc$resultados_var_es
-resultados_crc$comparacion_aic
-resultados_crc$modelo_copula
-resultados_crc$modelo_garch
+resultados_copula_crc$resultados_var_es
+resultados_copula_crc$comparacion_aic
+resultados_copula_crc$modelo_copula
+resultados_copula_crc$modelo_garch
 
 graficos_crc <- crear_graficos_diagnosticos(resultados_crc)
 
@@ -282,15 +292,56 @@ Para el caso del Yuan
 
 ```{r}
 
-resultados_cny <- calcular_var_es_copula(usd_cny %>% rename(Percentage_change=7), 
+resultados_copula_cny <- calcular_var_es_copula(usd_cny %>% rename(Percentage_change=7), 
                                     niveles_confianza = c(0.95, 0.99))
 
-resultados_cny$resultados_var_es
-resultados_cny$comparacion_aic
-resultados_cny$modelo_copula
-resultados_cny$modelo_garch
+resultados_copula_cny$resultados_var_es
+resultados_copula_cny$comparacion_aic
+resultados_copula_cny$modelo_copula
+resultados_copula_cny$modelo_garch
 
 graficos_cny <- crear_graficos_diagnosticos(resultados_cny)
 
 ```
 
+Con lo cual, utilizando la formula:
+
+$$
+                  R(x,y,z) = \phi VaR(x) + \rho VaR(y) + \gamma Var(z)
+$$
+Y dado que la distribución del portafolio está dada por: 55% euros, 25% colones y 20% yuanes, entonces:
+
+```{r}
+# VaR al 99, 95 y 90%
+
+Var_hist <- resultados_eur$VaR_Historico * distribución_portafolio[1] + resultados_crc$VaR_Historico * distribución_portafolio[2] + resultados_cny$VaR_Historico * distribución_portafolio[3]
+cat("VaR total histórico al 99%:", Var_hist[1], "\n")
+cat("VaR total histórico al 95%:", Var_hist[2], "\n")
+cat("VaR total histórico al 90%:", Var_hist[3], "\n")
+
+```
+```{r}
+Var_gaussiano <- resultados_eur$VaR_Gaussiano * distribución_portafolio[1] + resultados_crc$VaR_Gaussiano * distribución_portafolio[2] + resultados_cny$VaR_Gaussiano * distribución_portafolio[3]
+cat("VaR total gaussiano al 99%:", Var_gaussiano[1], "\n")
+cat("VaR total gaussiano al 95%:", Var_gaussiano[2], "\n")
+cat("VaR total gaussiano al 90%:", Var_gaussiano[3], "\n")
+
+```
+
+```{r}
+Var_Cornish_Fisher <- resultados_eur$VaR_CornishFisher * distribución_portafolio[1] + resultados_crc$VaR_CornishFisher * distribución_portafolio[2] + resultados_cny$VaR_CornishFisher * distribución_portafolio[3]
+cat("VaR total Cornish-Fisher al 99%:", Var_gaussiano[1], "\n")
+cat("VaR total Cornish-Fisher al 95%:", Var_gaussiano[2], "\n")
+cat("VaR total Cornish-Fisher al 90%:", Var_gaussiano[3], "\n")
+
+```
+Posibles valores para la redistribución del portafolio
+
+```{r}
+equivalencia <- mean(c(resultados_cny$VaR_Historico[2], resultados_cny$VaR_Gaussiano[2], resultados_cny$VaR_CornishFisher[2])/c(resultados_eur$VaR_Historico[2], resultados_eur$VaR_Gaussiano[2], resultados_eur$VaR_CornishFisher[2]))
+distribución_portafolio[3] * (1+equivalencia)
+```
+
+# Recomendaciones
+
+* Excluyendo cópulas, el Yuan es la divisa que posee los menores niveles de VaR y ES. Por lo que una posibilidad consiste enaumentar su participación en el portafolio y disminuir equitativamente aquella que posea un mayor nivel, es decir, el euro. Con lo cual, la nueva distribución sería de 0.25 colones, 0.292 yuanes y 0.458 euros.
