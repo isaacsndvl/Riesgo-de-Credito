@@ -162,3 +162,58 @@ comparar_metodos <- function(datos_divisa, niveles_confianza = c(0.01, 0.05, 0.1
   
   return(list(resultados = df_resultados, comparacion = df_comparacion))
 }
+
+# Función para el cálculo del VaR/ES total del portafolio
+var_total <- function(var, confidence){
+  
+  if(confidence == 0.90){
+    var_conjunto <- as.matrix(c(resultados_eur[[var]][3], 
+                                resultados_crc[[var]][3], 
+                                resultados_cny[[var]][3]))
+    valor <- sqrt(t(var_conjunto) %*% covarianza %*% var_conjunto)
+  }
+  else if(confidence == 0.95){
+    var_conjunto <- as.matrix(c(resultados_eur[[var]][2], 
+                                resultados_crc[[var]][2], 
+                                resultados_cny[[var]][2]))
+    valor <- sqrt(t(var_conjunto) %*% covarianza %*% var_conjunto)
+  }
+  else if (confidence == 0.99){
+    var_conjunto <- as.matrix(c(resultados_eur[[var]][1], 
+                                resultados_crc[[var]][1], 
+                                resultados_cny[[var]][1]))
+    valor <- sqrt(t(var_conjunto) %*% covarianza %*% var_conjunto)
+  }
+  valor
+  
+}
+
+var_total_copulas <- function(var){
+  
+  var_conjunto <- as.matrix(c(resultados_copula_eur[["resultados_var_es"]][[var]], 
+                              resultados_copula_crc[["resultados_var_es"]][[var]], 
+                              resultados_copula_cny[["resultados_var_es"]][[var]]))
+  valor <- sqrt(t(var_conjunto) %*% covarianza %*% var_conjunto)
+
+  valor
+  
+}
+
+var_total_garch <- function(var, confianza){
+  
+  if(confianza== 0.95){
+    var_conjunto <- as.matrix(c(unlist(comparacion_garch_euro %>% filter(Tipo == var, Nivel == 95) %>% select(Valor_Final)), 
+                                unlist(comparacion_garch_colon %>% filter(Tipo == var, Nivel == 95) %>% select(Valor_Final)), 
+                                unlist(comparacion_garch_yuan %>% filter(Tipo == var, Nivel == 95) %>% select(Valor_Final))))
+    valor <- sqrt(t(var_conjunto) %*% covarianza %*% var_conjunto) 
+  } else if(confianza == 0.99){
+    var_conjunto <- as.matrix(c(unlist(comparacion_garch_euro %>% filter(Tipo == var, Nivel == 99) %>% select(Valor_Final)), 
+                                unlist(comparacion_garch_colon %>% filter(Tipo == var, Nivel == 99) %>% select(Valor_Final)), 
+                                unlist(comparacion_garch_yuan %>% filter(Tipo == var, Nivel == 99) %>% select(Valor_Final))))
+    valor <- sqrt(t(var_conjunto) %*% covarianza %*% var_conjunto)
+  }
+  
+  valor
+  
+}
+

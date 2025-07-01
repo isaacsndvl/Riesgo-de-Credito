@@ -188,6 +188,42 @@ Dos elementos que resultan pertinentes considerar son:
 
 # Modelos GARCH
 
+```{r}
+source("./GARCH.R")
+```
+
+Euros
+
+```{r}
+resultados_garch_eur <- calcular_garch_var_es(eur_usd$Returns, niveles_confianza = c(0.05,0.01) )
+
+grafico_garch_var_es_euro <- graficar_histograma_var_garch(eur_usd$Returns, resultados_garch_eur, niveles_confianza = c(0.05,0.01), nombre_moneda = "Euro")
+
+comparacion_garch_euro <- comparar_var_es(resultados_garch_eur)
+
+```
+
+Yuan
+
+```{r}
+resultados_garch_yuan <- calcular_garch_var_es(usd_cny$Returns, niveles_confianza = c(0.05,0.01) )
+
+grafico_garch_var_es_yuan <- graficar_histograma_var_garch(usd_cny$Returns, resultados_garch_yuan, niveles_confianza = c(0.05,0.01), nombre_moneda = "Yuan")
+
+comparacion_garch_yuan <- comparar_var_es(resultados_garch_yuan)
+```
+
+Colón
+
+```{r}
+resultados_garch_colon <- calcular_garch_var_es_COLON(usd_crc$Returns, niveles_confianza = c(0.05,0.01) )
+
+
+grafico_garch_var_es_colon <- graficar_histograma_var_garch(usd_crc$Returns, resultados_garch_colon, niveles_confianza = c(0.05,0.01), nombre_moneda = "Colon")
+
+comparacion_garch_colon <- comparar_var_es(resultados_garch_colon)
+```
+
 # Implementación del VaR y el ES mediante el uso de cópulas.
 
 Las cópulas separan la estructura de dependencia entre distribuciones marginales de acuerdo a lo establecido en el teorema de Sklar, o lo que es lo mismo:
@@ -269,7 +305,7 @@ resultados_copula_eur$comparacion_aic
 resultados_copula_eur$modelo_copula
 resultados_copula_eur$modelo_garch
 
-graficos <- crear_graficos_diagnosticos(resultados)
+graficos <- crear_graficos_diagnosticos(resultados_copula_eur)
 ```
 
 Se aplica el modelo para el caso del colón.
@@ -284,7 +320,7 @@ resultados_copula_crc$comparacion_aic
 resultados_copula_crc$modelo_copula
 resultados_copula_crc$modelo_garch
 
-graficos_crc <- crear_graficos_diagnosticos(resultados_crc)
+graficos_crc <- crear_graficos_diagnosticos(resultados_copula_crc)
 
 ```
 
@@ -300,41 +336,110 @@ resultados_copula_cny$comparacion_aic
 resultados_copula_cny$modelo_copula
 resultados_copula_cny$modelo_garch
 
-graficos_cny <- crear_graficos_diagnosticos(resultados_cny)
+graficos_cny <- crear_graficos_diagnosticos(resultados_copula_cny)
+
+```
+
+# Cálculo del VaR del portafolio
+
+Para obtener el valor final deseado, es preciso obtener la covarianza entre las distintas divisas analizadas. 
+
+```{r}
+cor_eur_cny <- cor.test(unlist(eur_usd %>% filter(Date != "2025-05-18") %>% select(Price)), unlist(usd_cny$Price))
+cor_crc_cny <- cor.test(unlist(usd_crc %>% filter(Date != "2025-05-18") %>% select(Price)), unlist(usd_cny$Price))
+cor_eur_crc <- cor.test(unlist(eur_usd$Price), unlist(usd_crc$Price))
+
+cat("La correlación entre el EUR/USD y el USD/CNY es de:", cor_eur_cny$estimate, "\n")
+cat("La correlación entre el USD/CRC y el USD/CNY es de:", cor_crc_cny$estimate, "\n")
+cat("La correlación entre el EUR/USD y el USD/CRC es de:", cor_eur_crc$estimate, "\n")
+
+covarianza <- cov(data.frame(unlist(eur_usd %>% filter(Date != "2025-05-18") %>% select(Price)),
+                  unlist(usd_crc %>% filter(Date != "2025-05-18") %>% select(Price)),
+                  unlist(usd_cny$Price)) %>% rename(EUR_USD = 1, USD_CRC = 2, USD_CNY = 3))
 
 ```
 
 Con lo cual, utilizando la formula:
 
 $$
-                  R(x,y,z) = \phi VaR(x) + \rho VaR(y) + \gamma Var(z)
+                  VaR_{portafolio} = \sqrt(x^T \Sigma \ x)
 $$
-Y dado que la distribución del portafolio está dada por: 55% euros, 25% colones y 20% yuanes, entonces:
+Y dado que la distribución del portafolio está dada por: 55% euros, 25% colones y 20% yuanes, es posible calcular el VaR/ES del portafolio en su totalidad.
+
+Mediante el método histórico:
 
 ```{r}
-# VaR al 99, 95 y 90%
+# VaR al 99, 95 y 90% 
 
-Var_hist <- resultados_eur$VaR_Historico * distribución_portafolio[1] + resultados_crc$VaR_Historico * distribución_portafolio[2] + resultados_cny$VaR_Historico * distribución_portafolio[3]
-cat("VaR total histórico al 99%:", Var_hist[1], "\n")
-cat("VaR total histórico al 95%:", Var_hist[2], "\n")
-cat("VaR total histórico al 90%:", Var_hist[3], "\n")
+cat("VaR total histórico al 99%:", var_total("VaR_Historico", 0.99), "\n")
+cat("VaR total histórico al 95%:", var_total("VaR_Historico", 0.95), "\n")
+cat("VaR total histórico al 90%:", var_total("VaR_Historico", 0.90), "\n")
+
+# ES al 99, 95 y 90% 
+
+cat("ES total histórico al 99%:", var_total("ES_Historico", 0.99), "\n")
+cat("ES total histórico al 95%:", var_total("ES_Historico", 0.95), "\n")
+cat("ES total histórico al 90%:", var_total("ES_Historico", 0.90), "\n")
 
 ```
+
+
+Utilizando el método Gaussiano:
+
 ```{r}
-Var_gaussiano <- resultados_eur$VaR_Gaussiano * distribución_portafolio[1] + resultados_crc$VaR_Gaussiano * distribución_portafolio[2] + resultados_cny$VaR_Gaussiano * distribución_portafolio[3]
-cat("VaR total gaussiano al 99%:", Var_gaussiano[1], "\n")
-cat("VaR total gaussiano al 95%:", Var_gaussiano[2], "\n")
-cat("VaR total gaussiano al 90%:", Var_gaussiano[3], "\n")
+# VaR al 99, 95 y 90% 
+
+cat("VaR total gaussiano al 99%:", var_total("VaR_Gaussiano", 0.99), "\n")
+cat("VaR total gaussiano al 95%:", var_total("VaR_Gaussiano", 0.95), "\n")
+cat("VaR total gaussiano al 90%:", var_total("VaR_Gaussiano", 0.90), "\n")
+
+# ES al 99, 95 y 90% 
+
+cat("ES total gaussiano al 99%:", var_total("ES_Gaussiano", 0.99), "\n")
+cat("ES total gaussiano al 95%:", var_total("ES_Gaussiano", 0.95), "\n")
+cat("ES total gaussiano al 90%:", var_total("ES_Gaussiano", 0.90), "\n")
 
 ```
+
+Utilizando Cornish-Fisher:
 
 ```{r}
-Var_Cornish_Fisher <- resultados_eur$VaR_CornishFisher * distribución_portafolio[1] + resultados_crc$VaR_CornishFisher * distribución_portafolio[2] + resultados_cny$VaR_CornishFisher * distribución_portafolio[3]
-cat("VaR total Cornish-Fisher al 99%:", Var_gaussiano[1], "\n")
-cat("VaR total Cornish-Fisher al 95%:", Var_gaussiano[2], "\n")
-cat("VaR total Cornish-Fisher al 90%:", Var_gaussiano[3], "\n")
+# VaR al 99, 95 y 90% 
+
+cat("VaR total Cornish-Fisher al 99%:", var_total("VaR_CornishFisher", 0.99), "\n")
+cat("VaR total Cornish-Fisher al 95%:", var_total("VaR_CornishFisher", 0.95), "\n")
+cat("VaR total Cornish-Fisher al 90%:", var_total("VaR_CornishFisher", 0.90), "\n")
+
+# ES al 99, 95 y 90% 
+
+cat("ES total Cornish-Fisher al 99%:", var_total("ES_CornishFisher", 0.99), "\n")
+cat("ES total Cornish-Fisher al 95%:", var_total("ES_CornishFisher", 0.95), "\n")
+cat("ES total Cornish-Fisher al 90%:", var_total("ES_CornishFisher", 0.90), "\n")
 
 ```
+
+Mediante el modelo GARCH:
+
+```{r}
+
+cat("VaR con GARCH al 99%:", var_total_garch("VaR", 0.99), "\n")
+cat("VaR con GARCH al 95%:", var_total_garch("VaR", 0.95), "\n")
+cat("ES con GARCH al 99%:", var_total_garch("ES", 0.99), "\n")
+cat("ES con GARCH al 95%:", var_total_garch("ES", 0.95), "\n")
+```
+
+
+Para el caso de las cópulas:
+
+```{r}
+
+cat("VaR con cópulas al 99%:", var_total_copulas("VaR_0.99"), "\n")
+cat("VaR con cópulas al 95%:", var_total_copulas("VaR_0.95"), "\n")
+cat("ES con cópulas al 99%:", var_total_copulas("ES_0.99"), "\n")
+cat("ES con cópulas al 95%:", var_total_copulas("ES_0.95"), "\n")
+```
+
+
 Posibles valores para la redistribución del portafolio
 
 ```{r}
